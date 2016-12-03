@@ -56,6 +56,13 @@ class Callback(object):
         Could be useful to apply some tricks on parameters (clipping, low-rank, etc)
         """
 
+    @property
+    def global_step(self):
+        """
+        Access the global step value of this training.
+        """
+        return self.trainer.global_step
+
     def trigger_epoch(self):
         """
         Triggered after every epoch.

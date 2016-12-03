@@ -6,6 +6,7 @@ import tensorflow as tf
 import re, os
 import operator
 import json
+import traceback
 
 from .base import Callback
 from ..utils import logger
@@ -108,6 +109,7 @@ class StatPrinter(Callback):
         self._stat_holder.add_blacklist_tag(['global_step', 'epoch_num'])
 
         # just try to add this stat earlier so SendStat can use
+        # print "Uncomment this!!!!!!!!!!!"
         self._stat_holder.add_stat('epoch_num', self.epoch_num + 1)
 
     def _trigger_epoch(self):

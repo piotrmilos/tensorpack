@@ -103,7 +103,7 @@ def disable_logger():
     for func in _LOGGING_METHOD:
         globals()[func] = lambda x: None
 
-def auto_set_dir(action=None, overwrite=False):
+def auto_set_dir(action=None, overwrite=False, suffix = ""):
     """ set log directory to a subdir inside 'train_log', with the name being
     the main python file currently running"""
     if LOG_DIR is not None and not overwrite:
@@ -113,7 +113,7 @@ def auto_set_dir(action=None, overwrite=False):
     basename = os.path.basename(mod.__file__)
     set_logger_dir(
             os.path.join('train_log',
-                basename[:basename.rfind('.')]),
+                basename[:basename.rfind('.')] + suffix),
             action=action)
 
 def warn_dependency(name, dependencies):

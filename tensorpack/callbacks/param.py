@@ -165,6 +165,29 @@ class HumanHyperParamSetter(HyperParamSetter):
                     self.param.readable_name, self.file_name))
             return None
 
+class NeputneHyperParamSetter(HyperParamSetter):
+
+    def __init__(self, param, ctx):
+        super(NeputneHyperParamSetter, self).__init__(param)
+        self.changed = False
+        self.value_to_set = None
+        ctx.job.register_action("Set {}:".format(param), lambda value_str: self._setter_callback(value_str))
+
+    def _setter_callback(self, str):
+        self.value_to_set = float(str)
+        self.changed = True
+        return "Request registered."
+
+    def trigger_step(self):
+        if self.changed:
+            self._set_param()
+            self.changed = False
+
+
+    def _get_value_to_set(self):
+        return self.value_to_set
+
+
 class ScheduledHyperParamSetter(HyperParamSetter):
     """
     Set hyperparameters by a predefined schedule.

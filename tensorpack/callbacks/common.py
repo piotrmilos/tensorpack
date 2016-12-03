@@ -80,6 +80,20 @@ due to an alternative in a different tower".format(v.name, var_dict[name].name))
                 self.path,
                 global_step=get_global_step(),
                 write_meta_graph=False)
+
+            # create a symbolic link for the latest model
+            latest = self.saver.last_checkpoints[-1]
+            basename = os.path.basename(latest)
+            linkname = os.path.join(os.path.dirname(latest), 'latest')
+            try:
+                os.unlink(linkname)
+            except OSError:
+                pass
+            os.symlink(basename, linkname)
+        #     PM: Make a symlink with the name of epoch
+            linkname = os.path.join(os.path.dirname(latest), "epoch{}".format(self.epoch_num))
+            print "PM:Creating linkname:{}".format(linkname)
+            os.symlink(basename, linkname)
         except (OSError, IOError):   # disk error sometimes.. just ignore it
             logger.exception("Exception in ModelSaver.trigger_epoch!")
 
