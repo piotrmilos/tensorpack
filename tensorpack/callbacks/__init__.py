@@ -14,6 +14,7 @@ def _global_import(name):
 
 for _, module_name, _ in walk_packages(
         [os.path.dirname(__file__)]):
-    if not module_name.startswith('_'):
+    # PM: We do not want to handele the neptune package in this starnge way ;)
+    if not module_name.startswith('_') and not module_name=="neptune":
         _global_import(module_name)
 

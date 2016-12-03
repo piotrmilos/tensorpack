@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # File: base.py
 # Author: Yuxin Wu <ppwwyyxxc@gmail.com>
-
+import os
 from abc import ABCMeta, abstractmethod
 import signal
 import re
 import weakref
+
+import time
 from six.moves import range
 import tqdm
 
@@ -79,6 +81,7 @@ class Trainer(object):
         self._trigger_epoch()
         # trigger callbacks
         self.config.callbacks.trigger_epoch()
+
         self.summary_writer.flush()
 
     @abstractmethod
@@ -139,23 +142,37 @@ class Trainer(object):
                 logger.info("Start training with global_step={}".format(get_global_step()))
                 for epoch_num in range(
                         self.config.starting_epoch, self.config.max_epoch+1):
-                    with timed_operation(
-                        'Epoch {} (global_step {})'.format(
-                            epoch_num, get_global_step() + self.config.step_per_epoch)):
-                        for step in tqdm.trange(
-                                self.config.step_per_epoch,
-                                **get_tqdm_kwargs(leave=True)):
+                    if "NON_INTERACTIVE" in os.environ:
+                        logger.info("Non interactie run. Possibly in Neptune")
+                        for step in range(1, self.config.step_per_epoch):
+                            if get_global_step() % 100 == 1:
+                                logger.info("Step: {}. Logging every 100 steps.".format(get_global_step() - 1))
+                        # for step in xrange(1, self.config.step_per_epoch):
                             if self.coord.should_stop():
                                 return
-                            self.run_step() # implemented by subclass
-                            callbacks.trigger_step()   # not useful?
-                        self.trigger_epoch()
+                            self.run_step()
+                            callbacks.trigger_step()
+                            # self.global_step += 1
+                    else:
+                        with timed_operation(
+                            'Epoch {} (global_step {})'.format(
+                                epoch_num, get_global_step() + self.config.step_per_epoch)):
+                            for step in tqdm.trange(
+                                    self.config.step_per_epoch,
+                                    **get_tqdm_kwargs(leave=True)):
+                                if self.coord.should_stop():
+                                    return
+                                self.run_step() # implemented by subclass
+                                callbacks.trigger_step()   # not useful?
+
+                    self.trigger_epoch()
             except StopTraining:
                 logger.info("Training was stopped.")
             except:
                 raise
             finally:
                 callbacks.after_train()
+                time.sleep(10)
                 self.coord.request_stop()
                 self.summary_writer.close()
                 self.sess.close()

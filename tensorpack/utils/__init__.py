@@ -19,3 +19,4 @@ def _global_import(name):
 _global_import('naming')
 _global_import('utils')
 _global_import('gpu')
+# _global_import('stats')
