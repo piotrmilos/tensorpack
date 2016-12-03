@@ -15,12 +15,13 @@ from ..tfutils import (backup_collection, restore_collection,
         get_global_step_var, TowerContext)
 from ..tfutils.gradproc import apply_grad_processors, ScaleGradient
 
-from .trainer import FeedlessTrainer, SingleCostFeedlessTrainer, MultiPredictorTowerTrainer
-from .queue import QueueInputTrainer, QueueInputTrainerBase
+from .trainer import FeedfreeTrainer, SingleCostFeedfreeTrainer, MultiPredictorTowerTrainer
+from .queue import QueueInputTrainer
+from .input_data import QueueInput
 
 __all__ = ['AsyncMultiGPUTrainer', 'SyncMultiGPUTrainer']
 
-class MultiGPUTrainer(FeedlessTrainer):
+class MultiGPUTrainer(FeedfreeTrainer):
     """ Base class for multi-gpu training"""
     @staticmethod
     def _multi_tower_grads(towers, get_tower_grad_func):
@@ -42,15 +43,20 @@ class MultiGPUTrainer(FeedlessTrainer):
         restore_collection(backup)
         return grad_list
 
-class SyncMultiGPUTrainer(QueueInputTrainerBase,
-        MultiGPUTrainer,
-        SingleCostFeedlessTrainer,
+class SyncMultiGPUTrainer(MultiGPUTrainer,
+        SingleCostFeedfreeTrainer,
         MultiPredictorTowerTrainer):
     def __init__(self, config, input_queue=None, predict_tower=None):
-        assert len(config.tower) >= 1, "MultiGPUTrainer must be used with at least one GPU."
+        if hasattr(config, 'dataset'):
+            self._input_method = QueueInput(config.dataset, input_queue)
+        else:
+            self._input_method = config.data
+            assert isinstance(self._input_method, QueueInput)
         super(SyncMultiGPUTrainer, self).__init__(config)
+
         self._setup_predictor_factory(predict_tower)
-        self._build_enque_thread(input_queue)
+        assert len(config.tower) >= 1, "MultiGPUTrainer must be used with at least one GPU."
+
 
     @staticmethod
     def _average_grads(tower_grads):
@@ -75,6 +81,7 @@ class SyncMultiGPUTrainer(QueueInputTrainerBase,
         return ret
 
     def _setup(self):
+        super(SyncMultiGPUTrainer, self)._setup()
         grad_list = MultiGPUTrainer._multi_tower_grads(
                 self.config.tower, lambda: self._get_cost_and_grad()[1])
         grads = SyncMultiGPUTrainer._average_grads(grad_list)
@@ -87,24 +94,29 @@ class SyncMultiGPUTrainer(QueueInputTrainerBase,
     def run_step(self):
         self.sess.run(self.train_op)
 
-class AsyncMultiGPUTrainer(QueueInputTrainerBase,
-        MultiGPUTrainer,
-        SingleCostFeedlessTrainer,
+class AsyncMultiGPUTrainer(MultiGPUTrainer,
+        SingleCostFeedfreeTrainer,
         MultiPredictorTowerTrainer):
     def __init__(self, config,
             input_queue=None,
             predict_tower=None,
             average_gradient=True):
+        if hasattr(config, 'dataset'):
+            self._input_method = QueueInput(config.dataset, input_queue)
+        else:
+            self._input_method = config.data
+            assert isinstance(self._input_method, QueueInput)
         super(AsyncMultiGPUTrainer, self).__init__(config)
+
         self._setup_predictor_factory(predict_tower)
-        self._build_enque_thread(input_queue)
-        self.average_gradient = average_gradient
+        self._average_gradient = average_gradient
 
     def _setup(self):
+        super(AsyncMultiGPUTrainer, self)._setup()
         grad_list = MultiGPUTrainer._multi_tower_grads(
                 self.config.tower, lambda: self._get_cost_and_grad()[1])
         gradprocs = self.model.get_gradient_processor()
-        if self.average_gradient and self.config.nr_tower > 1:
+        if self._average_gradient and self.config.nr_tower > 1:
             # pretend to average the grads, in order to make async and
             # sync have consistent effective learning rate
             gradprocs.insert(0, ScaleGradient(('.*', 1.0 / self.config.nr_tower), log=False))
@@ -147,10 +159,11 @@ class AsyncMultiGPUTrainer(QueueInputTrainerBase,
         for th in self.training_threads:
             th.pause()
         try:
-            async_step_total_cnt = int(re.findall(
-                '[0-9]+', self.async_step_counter.__str__())[0])
-            self.write_scalar_summary(
-                    'async_global_step', async_step_total_cnt)
+            if self.config.tower > 1:
+                async_step_total_cnt = int(re.findall(
+                    '[0-9]+', self.async_step_counter.__str__())[0])
+                self.write_scalar_summary(
+                        'async_global_step', async_step_total_cnt)
         except:
             logger.exception("Cannot log async_global_step")
         super(AsyncMultiGPUTrainer, self)._trigger_epoch()
