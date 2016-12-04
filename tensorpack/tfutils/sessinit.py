@@ -69,6 +69,7 @@ class SaverRestore(SessionInit):
     def _init(self, sess):
         logger.info(
             "Restoring checkpoint from {} ...".format(self.path))
+        print "Restoring checkpoint from {} ...".format(self.path)
         chkpt_vars = SaverRestore._read_checkpoint_vars(self.path)
         vars_map = self._get_vars_to_restore_multimap(chkpt_vars)
         for dic in SaverRestore._produce_restore_dict(vars_map):

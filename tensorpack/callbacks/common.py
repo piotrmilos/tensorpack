@@ -39,12 +39,13 @@ class ModelSaver(Callback):
         for key in self.var_collections:
             vars.extend(tf.get_collection(key))
         self.path = os.path.join(logger.LOG_DIR, 'model')
+        # print "VARS TO SAVE:{}".format(vars)
         try:
             self.saver = tf.train.Saver(
                 var_list=ModelSaver._get_var_dict(vars),
                 max_to_keep=self.keep_recent,
                 keep_checkpoint_every_n_hours=self.keep_freq,
-                write_version=tf.train.SaverDef.V2)
+                write_version=tf.train.SaverDef.V1)
         except:
             self.saver = tf.train.Saver(
                 var_list=ModelSaver._get_var_dict(vars),
@@ -57,6 +58,7 @@ class ModelSaver(Callback):
         var_dict = {}
         for v in vars:
             name = get_savename_from_varname(v.name)
+            # print "VAAAARRR:{}".format(name)
             if name not in var_dict:
                 if name != v.name:
                     logger.info(
@@ -81,19 +83,19 @@ due to an alternative in a different tower".format(v.name, var_dict[name].name))
                 global_step=get_global_step(),
                 write_meta_graph=False)
 
-            # create a symbolic link for the latest model
-            latest = self.saver.last_checkpoints[-1]
-            basename = os.path.basename(latest)
-            linkname = os.path.join(os.path.dirname(latest), 'latest')
-            try:
-                os.unlink(linkname)
-            except OSError:
-                pass
-            os.symlink(basename, linkname)
-        #     PM: Make a symlink with the name of epoch
-            linkname = os.path.join(os.path.dirname(latest), "epoch{}".format(self.epoch_num))
-            print "PM:Creating linkname:{}".format(linkname)
-            os.symlink(basename, linkname)
+        #     # create a symbolic link for the latest model
+        #     latest = self.saver.last_checkpoints[-1]
+        #     basename = os.path.basename(latest)
+        #     linkname = os.path.join(os.path.dirname(latest), 'latest')
+        #     try:
+        #         os.unlink(linkname)
+        #     except OSError:
+        #         pass
+        #     os.symlink(basename, linkname)
+        # #     PM: Make a symlink with the name of epoch
+        #     linkname = os.path.join(os.path.dirname(latest), "epoch{}".format(self.epoch_num))
+        #     print "PM:Creating linkname:{}".format(linkname)
+        #     os.symlink(basename, linkname)
         except (OSError, IOError):   # disk error sometimes.. just ignore it
             logger.exception("Exception in ModelSaver.trigger_epoch!")
 

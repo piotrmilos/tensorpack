@@ -12,6 +12,7 @@ import six
 
 from tensorpack import *
 from tensorpack.RL import *
+from tensorpack.tfutils.sessinit import SaverRestore
 
 IMAGE_SIZE = (84, 84)
 FRAME_HISTORY = 4
