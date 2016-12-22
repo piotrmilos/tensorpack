@@ -147,6 +147,7 @@ class AsyncMultiGPUTrainer(MultiGPUTrainer,
         self.async_running = False
 
     def run_step(self):
+        # print "Run step."
         if not self.async_running:
             self.async_running = True
             for th in self.training_threads: # resume all threads

@@ -23,8 +23,9 @@ class HistoryFramePlayer(ProxyPlayer):
 
         s = self.player.current_state()
         self.history.append(s)
-        self.concatenate_axis = len(s.shape) -1
+        self.concatenate_axis = len(s.shape) - 1
         self.history_processor = history_processor
+        self._rewards_count = 0
 
 
     def _current_state(self):
@@ -45,8 +46,12 @@ class HistoryFramePlayer(ProxyPlayer):
         else:
             return state
 
+    def get_rewards_count(self):
+        return self._rewards_count
+
     def action(self, act):
         r, isOver = self.player.action(act)
+        self._rewards_count + r
         s = self.player.current_state()
         self.history.append(s)
 

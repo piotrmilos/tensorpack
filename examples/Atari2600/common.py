@@ -23,7 +23,7 @@ from tensorpack.callbacks import *
 global get_player
 get_player = None
 
-def  play_one_episode(player, func, verbose=False):
+def play_one_episode(player, func, verbose=False):
     def f(s):
         spc = player.get_action_space()
         act = func([[s]])[0][0].argmax()
