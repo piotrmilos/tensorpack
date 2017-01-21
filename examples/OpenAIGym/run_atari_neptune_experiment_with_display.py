@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # File: run-atari.py
 # Author: Yuxin Wu <ppwwyyxxc@gmail.com>
+import shutil
 
 import numpy as np
 import tensorflow as tf
@@ -11,11 +12,9 @@ import argparse
 import six
 import yaml
 
-print "TF version:{}".format(tf.__version__)
-
 from tensorpack import *
 from tensorpack.RL import *
-from tensorpack.RL.common import MapPlayerState
+from tensorpack.RL.common import MapPlayerState, PreventStuckPlayer, KeyboardPlayer
 from tensorpack.RL.gymenv import GymEnv
 from tensorpack.models.model_desc import InputVar
 from tensorpack.predict.common import get_predict_func, PredictConfig
@@ -24,7 +23,7 @@ import multiprocessing as mp
 from examples.OpenAIGym.train_atari_with_neptune import FRAME_HISTORY, DEBUGING_INFO
 
 from easydict import EasyDict as edict
-
+print "TF version:{}".format(tf.__version__)
 IMAGE_SIZE = (84, 84)
 # FRAME_HISTORY = 4
 CHANNEL = FRAME_HISTORY * 3
@@ -37,7 +36,7 @@ EXPERIMENT_MODEL = None
 from common import play_one_episode
 
 def get_player(dumpdir=None):
-    pl = GymEnv(ENV_NAME, dumpdir=dumpdir, force=True)
+    pl = GymEnv(ENV_NAME, viz=0.001, dumpdir=dumpdir, force=True)
 
     pl = MapPlayerState(pl, EXPERIMENT_MODEL.get_screen_processor())
 
@@ -51,6 +50,8 @@ def get_player(dumpdir=None):
     if not train:
         pl = PreventStuckPlayer(pl, 30, 1)
     pl = LimitLengthPlayer(pl, 40000)
+    pl = KeyboardPlayer(pl)
+
     return pl
 
 # class Model(ModelDesc):
@@ -85,7 +86,9 @@ def run_submission(cfg, dump_dir = 'gym-submit'):
     dirname = dump_dir
     player = get_player(dumpdir=dirname)
     # player = get_player("/home/piotr.milos")
+    print "config:{}".format(cfg)
     predfunc = get_predict_func(cfg)
+
     for k in range(10):
         if k != 0:
             player.restart_episode()
@@ -141,7 +144,7 @@ def run_atari_neptune_experiment(yamlFile = None, modelToLaod = None, epoch=None
             model=EXPERIMENT_MODEL,
             session_init=SaverRestore(modelToLaod),
             input_var_names=['state'],
-            output_var_names=['logits'])
+            output_var_names=['logits', 'pred_value'])
     dump_dir = os.path.join(dump_dir_root, str(epoch))
     print "Writing to:{}".format(dump_dir)
     run_submission(cfg, dump_dir)
@@ -154,16 +157,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    dump_dir_root = os.path.join("/home/piotr.milos/video", args.experiment_yaml + args.experiment_neptune_id)
+    dump_dir_root = os.path.join("/tmp/video", args.experiment_yaml + args.experiment_neptune_id)
 
-    ROOT = "/home/piotr.milos/rl2"
+    # ROOT = "/home/piotr.milos/rl2"
+    ROOT = "/mnt/storage_codi/piotr.milos/Projects/rl2"
 
     EXPERIMENTS_DIR = os.path.join(ROOT, "NeptuneIntegration", "Experiments")
     EXPERIMENTS_DUMPS = os.path.join(ROOT, "NeptuneIntegration", "Neptune_dumps")
 
     experiment_dir = os.path.join(EXPERIMENTS_DUMPS, args.experiment_yaml,
                                   "src", "train_log", "train_atari_with_neptune_proxy" + args.experiment_neptune_id)
-
+    print "Experiment path:{}".format(experiment_dir)
     files = os.listdir(experiment_dir)
 
     yamlFile = os.path.join(EXPERIMENTS_DIR, args.experiment_yaml + ".yaml")
@@ -199,12 +203,15 @@ if __name__ == '__main__':
         logger.info("Testing epoch:{}".format(e))
         print "Testing epoch:{}".format(e)
         modelToLaod = os.path.join(experiment_dir, chooseFileDict[int(e)])
+        print "Model to load:{}".format(modelToLaod)
+        shutil.copy(modelToLaod, "/tmp/model")
+        modelToLaod = "/tmp/model"
+        run_atari_neptune_experiment(yamlFile=yamlFile, modelToLaod=modelToLaod)
+        # kwargs = {"yamlFile":yamlFile, "modelToLaod":modelToLaod, "epoch":e}
 
-        kwargs = {"yamlFile":yamlFile, "modelToLaod":modelToLaod, "epoch":e}
-
-        p = mp.Process(target=run_atari_neptune_experiment, kwargs=kwargs)
-        p.start()
-        p.join()
+        # p = mp.Process(target=run_atari_neptune_experiment, kwargs=kwargs)
+        # p.start()
+        # p.join()
     # run_atari_neptune_experiment(yamlFile=yamlFile, modelToLaod=modelToLaod)
 
 

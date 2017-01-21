@@ -3,6 +3,9 @@ import random
 from abc import ABCMeta, abstractmethod
 
 import cv2
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
 
 from examples.OpenAIGym.train_atari_with_neptune import FRAME_HISTORY, DEBUGING_INFO
 from tensorpack.models.conv2d import Conv2D
@@ -17,6 +20,9 @@ from tensorpack.tfutils.argscope import argscope
 from tensorpack.tfutils.gradproc import MapGradient, SummaryGradient
 from tensorpack.models.nonlin import PReLU
 import numpy as np
+from tensorpack.callbacks.neptune import NeptuneLogger
+
+from game_processors import _unary_representation
 
 
 game = "montezuma_revenge"
@@ -45,6 +51,21 @@ rg.register(
     id='{}'.format(name),
     # entry_point='gym.envs.atari:AtariEnv',
     entry_point='examples.OpenAIGym.montezuma_env:MontezumaRevengeFogOfWarRandomAction',
+    kwargs={'game': game, 'obs_type': obs_type, 'frameskip': 1},  # A frameskip of 1 means we get every frame
+    timestep_limit=frameskip * 100000,
+    nondeterministic=nondeterministic,
+)
+
+game = "montezuma_revenge"
+name = "MontezumaRevengeRandomActionRandomStartingStateCodilime-v0"
+obs_type = 'image'
+nondeterministic = False
+frameskip = 1
+
+rg.register(
+    id='{}'.format(name),
+    # entry_point='gym.envs.atari:AtariEnv',
+    entry_point='examples.OpenAIGym.montezuma_env:MontezumaRevengeFogOfWarRandomActionRandomStartingState',
     kwargs={'game': game, 'obs_type': obs_type, 'frameskip': 1},  # A frameskip of 1 means we get every frame
     timestep_limit=frameskip * 100000,
     nondeterministic=nondeterministic,
@@ -154,9 +175,13 @@ class AtariExperimentFromScreenModel(AtariExperimentModel):
         self.CHANNELANDHISTORY = 3*FRAME_HISTORY
         print "Frame history:{}".format(FRAME_HISTORY)
         self.input_shape = self.IMAGE_SIZE + (self.CHANNELANDHISTORY,)
+        self.image_index = 1
         # print "INPUT_SHAPE:{}".format(self.input_shape)
 
     def _get_NN_prediction(self, image):
+        self._create_unnary_variables_with_summary(image[:, 0, :, 0],
+                                                   (10, 10, 6, 6, 6),
+                                                   ("rewards", "levels", "lives0", "lives1", "lives2"))
         image = image / 255.0
         with argscope(Conv2D, nl=tf.nn.relu):
             lc0 = Conv2D('conv0', image, out_channel=32, kernel_shape=5)
@@ -184,126 +209,106 @@ class AtariExperimentFromScreenModel(AtariExperimentModel):
 
         return policy, value
 
-    def get_screen_processor(self):
-        return lambda image: cv2.resize(image, self.IMAGE_SIZE[::-1])
+
+    def _create_unnary_variables_with_summary(self, vec, sizes, names):
+        index = 0
+        for size, name in zip(sizes, names):
+            for s in xrange(size):
+                var_name = name + "_{}".format(s)
+                # print "Creating: {}".format(var_name)
+                v = tf.slice(vec, [0, index], [-1, 1], name = var_name)
+                var_to_vis = tf.reduce_mean(v, name = var_name+"_vis")
+                # print "Creating:{}".format(var_name+"_vis")
+                summary.add_moving_summary(var_to_vis)
+                index += 1
+
+    def _screen_processor(self, image):
+        # print "Image:{}".format(image)
+        # NeptuneLogger.get_instancetance()
+        additonal_data = image[0, 0:84, 0].tolist()
+        # worker_id = additonal_data.pop(0)
+        # is_imporant_event = additonal_data.pop(0)
+        # if is_imporant_event==1:
+        #     self.image_index += 1
+        #     # print "Impoartant event!"
+        #     screenshot_with_debugs_img = self.screenshot_with_debugs(image, worker_id,
+        #                                                     additonal_data,
+        #                                                     ["rewards", "levels", "lives0", "lives1", "lives2",
+        #                                                      "level0", "level1", "level2", "level3", "level4"])
+        #     screenshot_with_debugs_img.save("/tmp/screenshot{}.png".format(self.image_index), "PNG")
+        #     # NeptuneLogger.get_instance().send_image(screenshot_with_debugs_img)
+        #     # self.neptune_image_logger.send_image(screenshot_with_debugs_img)
+
+
+        additonal_data = _unary_representation(additonal_data, (10, 10, 6, 6, 6))
+        additonal_data = np.lib.pad(additonal_data, (0, 84 - additonal_data.size), 'constant', constant_values=(0,0))
+        image_new =  cv2.resize(image, self.IMAGE_SIZE[::-1])
+        image_new[0,:,0] = additonal_data
+
+        return image_new
 
     def get_history_processor(self):
         return None
 
-# class AtariExperimentFromScreenStagesResetModel(AtariExperimentFromScreenModel):
-#
-#     def _get_NN_prediction(self, image):
-#         rewards_events_0 = image[:, 0, 0, 0]
-#         rewards_events_1 = image[:, 0, 0, 1]
-#         rewards_events_2 = image[:, 0, 0, 2]
-#
-#         weight0 = rewards_events_0 * 1 + rewards_events_1 * 0.5 + rewards_events_2 * 0.25
-#         weight1 = rewards_events_0 * 0 + rewards_events_1 * 0.5 + rewards_events_2 * 0.25
-#         weight2 = rewards_events_0 * 0 + rewards_events_1 * 0.0 + rewards_events_2 * 0.25
-#
-#
-#         m_weight0 = tf.reduce_mean(weight0, name="m_weight0")
-#         m_weight1 = tf.reduce_mean(weight1, name="m_weight1")
-#         m_weight2 = tf.reduce_mean(weight2, name="m_weight2")
-#
-#         summary.add_moving_summary(m_weight0)
-#         summary.add_moving_summary(m_weight1)
-#         summary.add_moving_summary(m_weight2)
-#         # tf.scalar_summary('weight0', weight0)
-#         # tf.scalar_summary('weight1', weight1)
-#         # tf.scalar_summary('weight2', weight2t2)
-#
-#         weight0 = tf.reshape(weight0, [-1, 1])
-#         weight1 = tf.reshape(weight1, [-1, 1])
-#         weight2 = tf.reshape(weight2, [-1, 1])
-#
-#         # version = tf.__version__
-#         # assert 1==0, "Version:{}".format(version)
-#         #
-#         # rewards_events = tf.reshape(rewards_events_0, [-1, 1])
-#         # weight0 = rewards_events * 0.5 + (1 - rewards_events) * 1
-#         # weight1 = rewards_events * 0.5 + (1 - rewards_events) * 0
-#         # weight0 = tf.reshape(weight0, [-1, 1])
-#         # weight1 = tf.reshape(weight1, [-1, 1])
-#         #
-#         # print "Rewards:{} and {} and {}".format(rewards_events, tf.constant(1), tf.Variable(10000))
-#         # aaa = tf.equal(rewards_events, tf.constant(0.0))
-#         #
-#         # weight0 = tf.cond(tf.equal(rewards_events, tf.constant(0.0)), lambda: rewards_events, lambda: rewards_events)
-#         # weight1 = tf.cond(tf.equal(rewards_events, tf.constant(0.0)), lambda: tf.constant(0), lambda: tf.Variable(10000))
-#         # weight2 = tf.cond(tf.equal(rewards_events, tf.constant(0.0)), lambda: tf.constant(0), lambda: tf.Variable(10000))
-#         #
-#         # weight0 = tf.cond(tf.equal(rewards_events, tf.constant(1.0)), lambda: tf.constant(0.5), weight0)
-#         # weight1 = tf.cond(tf.equal(rewards_events, tf.constant(1.0)), lambda: tf.constant(0.5), weight1)
-#         # weight2 = tf.cond(tf.equal(rewards_events, tf.constant(1.0)), lambda: tf.constant(0), weight2)
-#         #
-#         # weight0 = tf.cond(tf.equal(rewards_events, tf.constant(2.0)), lambda: tf.Variable(0.5, trainable=False), weight0)
-#         # weight1 = tf.cond(tf.equal(rewards_events, tf.constant(2.0)), lambda: tf.Variable(0.5, trainable=False), weight1)
-#         # weight2 = tf.cond(tf.equal(rewards_events, tf.constant(2.0)), lambda: tf.Variable(0, trainable=False), weight2)
-#         #
-#         # weight0 = tf.reshape(weight0, [-1, 1], name="weight0")
-#         # weight1 = tf.reshape(weight1, [-1, 1], name="weight1")
-#         # weight2 = tf.reshape(weight2, [-1, 1], name="weight2")
-#         #
-#         # tf.scalar_summary('weight0', weight0)
-#         # tf.scalar_summary('weight1', weight1)
-#         # tf.scalar_summary('weight2', weight2)
-#
-#
-#         # weights = tf.Variable([[1, 0], [0.5, 0.5]], trainable=False)
-#         # current_weights = weights[rewards_events,:]
-#
-#         # print "The number of rewards events are:{}".format(rewards_events)
-#
-#         image = image / 255.0
-#         with argscope(Conv2D, nl=tf.nn.relu):
-#             lc0 = Conv2D('conv0', image, out_channel=32, kernel_shape=5)
-#             lc0 = MaxPooling('pool0', lc0, 2)
-#             lc1 = Conv2D('conv1', lc0, out_channel=32, kernel_shape=5)
-#             lc1 = MaxPooling('pool1', lc1, 2)
-#             lc2 = Conv2D('conv2', lc1, out_channel=64, kernel_shape=4)
-#             lc2 = MaxPooling('pool2', lc2, 2)
-#             lc3 = Conv2D('conv3', lc2, out_channel=64, kernel_shape=3)
-#
-#         lfc00 = FullyConnected('fc00', lc3, 512, nl=tf.identity)
-#         lfc00 = PReLU('prelu0', lfc00)
-#         policy0 = FullyConnected('fc-pi0', lfc00, out_dim=self.number_of_actions, nl=tf.identity)
-#         value0 = FullyConnected('fc-v0', lfc00, 1, nl=tf.identity)
-#
-#         lfc01 = FullyConnected('fc01', lc3, 512, nl=tf.identity)
-#         lfc01 = PReLU('prelu1', lfc01)
-#         policy1 = FullyConnected('fc-pi1', lfc01, out_dim=self.number_of_actions, nl=tf.identity)
-#         value1 = FullyConnected('fc-v1', lfc01, 1, nl=tf.identity)
-#
-#         lfc02 = FullyConnected('fc02', lc3, 512, nl=tf.identity)
-#         lfc02 = PReLU('prelu2', lfc02)
-#         policy2 = FullyConnected('fc-pi2', lfc02, out_dim=self.number_of_actions, nl=tf.identity)
-#         value2 = FullyConnected('fc-v2', lfc02, 1, nl=tf.identity)
-#
-#         policy = tf.add_n([tf.multiply(weight0, policy0), tf.multiply(weight1, policy1), tf.multiply(weight2, policy2)])
-#         value = tf.add_n([tf.multiply(weight0, value0), tf.multiply(weight1, value1), tf.multiply(weight2, value2)])
-#
-#         # if DEBUGING_INFO:
-#         #     summary.add_activation_summary(lc0, "conv_0")
-#         #     summary.add_activation_summary(lc1, "conv_1")
-#         #     summary.add_activation_summary(lc2, "conv_2")
-#         #     summary.add_activation_summary(lc3, "conv_3")
-#         #     summary.add_activation_summary(lfc0, "fc0")
-#         #     summary.add_activation_summary(policy, "policy")
-#         #     summary.add_activation_summary(value, "fc-v")
-#
-#         return policy, value
-#
-#     def _screen_processor(self, image):
-#         # print "Image:{}".format(image)
-#         additonal_data = image[0,0,:]
-#         image_new =  cv2.resize(image, self.IMAGE_SIZE[::-1])
-#         image_new[0,0,:] = additonal_data
-#
-#         return image_new
-#
-#     def get_screen_processor(self):
-#         return lambda image: self._screen_processor(image)
+
+    def get_screen_processor(self):
+        return lambda image: self._screen_processor(image)
+
+
+class AtariExperimentFromScreenStagesResetModel(AtariExperimentFromScreenModel):
+
+    def _get_NN_prediction(self, image):
+        self._create_unnary_variables_with_summary(image[:, 0, :, 0],
+                                                   (10, 10, 6, 6, 6),
+                                                   ("rewards", "levels", "lives0", "lives1", "lives2"))
+        NUMBER_OF_REWARD_EVENTS = 10
+
+        rewards_events = []
+        for x in xrange(NUMBER_OF_REWARD_EVENTS):
+            rewards_events.append(tf.reshape(image[:, 0, x, 0], (-1, 1)))
+
+
+        image = image / 255.0
+        with argscope(Conv2D, nl=tf.nn.relu):
+            lc0 = Conv2D('conv0', image, out_channel=32, kernel_shape=5)
+            lc0 = MaxPooling('pool0', lc0, 2)
+            lc1 = Conv2D('conv1', lc0, out_channel=32, kernel_shape=5)
+            lc1 = MaxPooling('pool1', lc1, 2)
+            lc2 = Conv2D('conv2', lc1, out_channel=64, kernel_shape=4)
+            lc2 = MaxPooling('pool2', lc2, 2)
+            lc3 = Conv2D('conv3', lc2, out_channel=64, kernel_shape=3)
+
+        policies = []
+        values = []
+        for x in xrange(10):
+            lfc0 = FullyConnected('fc0{}'.format(x), lc3, 512, nl=tf.identity)
+            lfc0 = PReLU('prelu{}'.format(x), lfc0)
+            policy = FullyConnected('fc-pi{}'.format(x), lfc0, out_dim=self.number_of_actions, nl=tf.identity)
+            value = FullyConnected('fc-v{}'.format(x), lfc0, 1, nl=tf.identity)
+
+            policies.append(policy)
+            values.append(value)
+
+        weighted_policies = []
+        weighted_values = []
+
+        for weight, policy, value in zip(rewards_events, policies, values):
+            weighted_policies.append(tf.multiply(weight, policy))
+            weighted_values.append(tf.multiply(weight, value))
+
+        policy = tf.add_n(weighted_policies)
+        value = tf.add_n(weighted_values)
+        # if DEBUGING_INFO:
+        #     summary.add_activation_summary(lc0, "conv_0")
+        #     summary.add_activation_summary(lc1, "conv_1")
+        #     summary.add_activation_summary(lc2, "conv_2")
+        #     summary.add_activation_summary(lc3, "conv_3")
+        #     summary.add_activation_summary(lfc0, "fc0")
+        #     summary.add_activation_summary(policy, "policy")
+        #     summary.add_activation_summary(value, "fc-v")
+
+        return policy, value
+
 
 
 class ProcessedAtariExperimentModel(AtariExperimentModel):

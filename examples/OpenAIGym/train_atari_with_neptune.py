@@ -62,10 +62,10 @@ LOCAL_TIME_MAX = 5
 # STEP_PER_EPOCH = 2000
 # EVAL_EPISODE = 20
 STEP_PER_EPOCH = 6000
-EVAL_EPISODE = 50
+EVAL_EPISODE = 5
 
 BATCH_SIZE = 128
-SIMULATOR_PROC = 50
+SIMULATOR_PROC = 30
 PREDICTOR_THREAD_PER_GPU = 2
 PREDICTOR_THREAD = None
 EVALUATE_PROC = min(multiprocessing.cpu_count() // 2, 20)
@@ -73,6 +73,8 @@ EVALUATE_PROC = min(multiprocessing.cpu_count() // 2, 20)
 NUM_ACTIONS = None
 ENV_NAME = None
 EXPERIMENT_MODEL = None
+
+EXPERIMENT_ID = None
 
 DEBUGING_INFO = 1
 
@@ -84,6 +86,9 @@ def get_player(viz=False, train=False, dumpdir=None):
     #     pl = nmt.NonMarkovEnvironment()
     # else:
     pl = GymEnv(ENV_NAME, dumpdir=dumpdir)
+    # print "HAS ATTR:{}".format(hasattr(pl, "experiment_id"))
+    if EXPERIMENT_ID != None and hasattr(pl.gymenv, "set_experiment_id"):
+        pl.gymenv.set_experiment_id(EXPERIMENT_ID)
     
     pl = MapPlayerState(pl, EXPERIMENT_MODEL.get_screen_processor())
 
@@ -149,6 +154,7 @@ class MySimulatorMaster(SimulatorMaster, Callback):
         R = float(init_r)
         for idx, k in enumerate(mem):
             R = np.clip(k.reward, -1, 1) + GAMMA * R
+            # print "Clipping: {}".format(R)
             self.queue.put([k.state, k.action, R])
 
         if not isOver:
@@ -164,13 +170,27 @@ def get_atribute(ctx, name, default_value = None):
     else:
         return default_value
 
+
+def set_motezuma_env_options(str, file):
+    with open(file, "w") as file:
+        file.write(str)
+
+
 def get_config(ctx):
     """ We use addiional id to make it possible to run multiple instances of the same code
     We use the neputne id for an easy reference.
     piotr.milos@codilime
     """
-    global HISTORY_LOGS #Ugly hack, make it better at some point, may be ;)
+    global HISTORY_LOGS, EXPERIMENT_ID #Ugly hack, make it better at some point, may be ;)
     id = ctx.job.id
+    EXPERIMENT_ID = hash(id)
+
+    import montezuma_env
+
+    ctx.job.register_action("Set starting point procssor:",
+                            lambda str: set_motezuma_env_options(str, montezuma_env.STARTING_POINT_SELECTOR))
+    ctx.job.register_action("Set rewards:",
+                            lambda str: set_motezuma_env_options(str, montezuma_env.REWARDS_FILE))
 
     logger.auto_set_dir(suffix=id)
 
@@ -190,10 +210,14 @@ def get_config(ctx):
     dataflow = BatchData(DataFromQueue(master.queue), BATCH_SIZE)
 
     # My stuff - PM
-    neptuneLogger = NeptuneLogger(ctx)
+    neptuneLogger = NeptuneLogger.get_instance()
     lr = tf.Variable(0.001, trainable=False, name='learning_rate')
     tf.scalar_summary('learning_rate', lr)
     num_epochs = get_atribute(ctx, "num_epochs", 100)
+
+    rewards_str = get_atribute(ctx, "rewards", "5 1 -200")
+    with open(montezuma_env.REWARDS_FILE, "w") as file:
+        file.write(rewards_str)
 
 
     if hasattr(ctx.params, "learning_rate_schedule"):
@@ -279,6 +303,8 @@ def run_training(ctx):
 
 
     if ctx.params.gpu:
+        # print "CUDA_VISIBLE_DEVICES:{}".format(os.environ['CUDA_VISIBLE_DEVICES'])
+        print "Set GPU:{}".format(ctx.params.gpu)
         os.environ['CUDA_VISIBLE_DEVICES'] = ctx.params.gpu
 
     nr_gpu = get_nr_gpu()

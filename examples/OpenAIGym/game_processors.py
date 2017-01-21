@@ -4,24 +4,27 @@ from examples.OpenAIGym.train_atari_with_neptune import FRAME_HISTORY
 
 def _unary_representation(values, sizes, type = 0):
     all_results = []
-    for x, size_x in zip(values, sizes):
-        x = int(x)
-        if type==0: #Fake unary but faster
-            # print "Fast type"
-            r = np.zeros(size_x)
-            r[x] = 1
-        else:
-            # print "Geunine types:({}, {}).".format(size_x, x)
-            if isinstance(x, int):
-                x = [x]
-            if isinstance(size_x, int):
-                size_x = [size_x]
-            r = np.ones(x)
-            pad_params = map(lambda (v1, v2): (0, v1 - v2), zip(size_x, x))
-            r = np.lib.pad(r, pad_params, 'constant', constant_values=(0))
+    try:
+        for x, size_x in zip(values, sizes):
+            x = int(x)
+            if type==0: #Fake unary but faster
+                # print "Fast type"
+                r = np.zeros(size_x)
+                r[x] = 1
+            else:
+                # print "Geunine types:({}, {}).".format(size_x, x)
+                if isinstance(x, int):
+                    x = [x]
+                if isinstance(size_x, int):
+                    size_x = [size_x]
+                r = np.ones(x)
+                pad_params = map(lambda (v1, v2): (0, v1 - v2), zip(size_x, x))
+                r = np.lib.pad(r, pad_params, 'constant', constant_values=(0))
 
-        all_results.append(r.flatten())
-
+            all_results.append(r.flatten())
+    except IndexError:
+        print "Index error with values:{} and sizes:{}".format(values, sizes)
+        raise IndexError
     return np.concatenate(all_results)
 
 

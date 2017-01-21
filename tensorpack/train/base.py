@@ -146,7 +146,7 @@ class Trainer(object):
                         logger.info("Non interactie run. Possibly in Neptune")
                         for step in range(1, self.config.step_per_epoch):
                             if get_global_step() % 100 == 1:
-                                logger.info("Stepxx: {}. Logging every 100 steps.".format(get_global_step() - 1))
+                                logger.info("Step: {}. Logging every 100 steps.".format(get_global_step() - 1))
                         # for step in xrange(1, self.config.step_per_epoch):
                             if self.coord.should_stop():
                                 return
