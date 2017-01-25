@@ -17,6 +17,7 @@ class RLEnvironment(object):
 
     def __init__(self):
         self.reset_stat()
+        self.cached_action = None
 
     @abstractmethod
     def current_state(self):
@@ -58,6 +59,7 @@ class RLEnvironment(object):
             stat = [stat]
         while True:
             s = self.current_state()
+            # print "Current state:{}".format(s)
             act = func(s)
             r, isOver = self.action(act)
             #print r
@@ -65,6 +67,7 @@ class RLEnvironment(object):
                 s = [self.stats[k] for k in stat]
                 self.reset_stat()
                 return s if len(s) > 1 else s[0]
+
 
 class ActionSpace(object):
     def __init__(self):

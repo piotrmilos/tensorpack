@@ -27,15 +27,9 @@ REWARDS_FILE = "rewards.txt"
 def combine_images(img1, img2):
     w1, h1, _ = img1.shape
     w2, h2, _ = img2.shape
-
-    print "IMG1:{}".format(type(img1))
-    print "IMG2:{}".format(type(img2))
-
     w3 = w1+w2
     h3 = max(h1, h2)
-
     joint_image_buf = np.full((w3, h3, 3), 255, dtype="uint8")
-
     joint_image_buf[0:w1, 0:h1, :] = img1
     joint_image_buf[w1:w1+w2, 0:h2, :] = img2
 
@@ -47,18 +41,34 @@ def get_debug_graph(values):
 
     plt.figure(figsize=(5, 2))
     x = np.array(['no', 'f', 'u', 'r', 'l', 'd', 'ur', 'ul', 'dr',
-                  'dl', 'uf', 'rf', 'lf', 'df', 'urf', 'drf', 'dlf', '', 'val'])
+                  'dl', 'uf', 'rf', 'lf', 'df', 'urf', 'drf', 'dlf', '', '','val'])
     y1 = values
     sns.barplot(x, y1, palette="BuGn_d")
     sns.despine(bottom=True)
 
     plt.savefig("/tmp/aaa.png")
 
+    plt.clf()
+
     import matplotlib.image as mpimg
     arr = np.array(Image.open("/tmp/aaa.png"))
     buf = arr[:,:,:3]
 
     return buf
+
+
+def get_debug_graph(values):
+    fig = matplotlib.pyplot.figure()
+    fig.canvas.draw()
+
+    x = np.array(['no', 'f', 'u', 'r', 'l', 'd', 'ur', 'ul', 'dr',
+                  'dl', 'uf', 'rf', 'lf', 'df', 'urf', 'drf', 'dlf', '', '', 'val'])
+    y1 = values
+    sns.barplot(x, y1, palette="BuGn_d", ax=fig)
+    sns.despine(bottom=True)
+
+    return None
+
 
 class MontezumaRevengeFogOfWar(AtariEnv):
 
@@ -87,6 +97,8 @@ class MontezumaRevengeFogOfWar(AtariEnv):
             self.conn = None
         self.experiment_id = None
         self._reward_hash = 0
+
+        self.additional_render_info = [1 for i in xrange(1,21)]
 
         # # self._filter_list = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 33, 35, 39, 41, 46, 57, 59, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 80, 81, 82, 85, 98, 104, 105, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
         # self._filter_list = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 33, 39, 41, 57, 59, 69, 71, 72, 73, 74, 75, 76, 77, 78, 85, 98, 104, 105, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123]
@@ -147,6 +159,9 @@ class MontezumaRevengeFogOfWar(AtariEnv):
 
         self._is_important_event = 0
 
+    def set_additional_render_info(self, val):
+        self.additional_render_info = val
+
     def _render(self, mode='human', close=False):
         if close:
             if self.viewer is not None:
@@ -155,7 +170,7 @@ class MontezumaRevengeFogOfWar(AtariEnv):
             return
         print "AAA"
         screen_img = self._get_image()
-        debug_img = get_debug_graph([1 for i in xrange(1,20)])
+        debug_img = get_debug_graph(self.additional_render_info)
 
         img = combine_images(screen_img, debug_img)
 
@@ -287,7 +302,7 @@ class MontezumaRevengeFogOfWar(AtariEnv):
             _detected_board = 5
         if abs(np.sum(ob[:, 1, 0]) - 6845) <= 2:
             _detected_board = 6
-        if abs(tmp_sum - 200) <= 3 or abs(tmp_sum - 314) <= 3:
+        if abs(tmp_sum - 200) <= 5 or abs(tmp_sum - 314) <= 5:
             _detected_board = self.board_id
 
         if _detected_board != -1:
@@ -344,6 +359,7 @@ class MontezumaRevengeFogOfWar(AtariEnv):
 
     def _read_rewards(self):
         global FOG_OF_WAR_REWARD, TRUE_REWARD_FACTOR, DEATH_REWARD
+        print "Rewards file: {}".format(REWARDS_FILE)
         try:
             with open(REWARDS_FILE, "r") as f:
                 rewards = f.readline()
@@ -354,7 +370,7 @@ class MontezumaRevengeFogOfWar(AtariEnv):
         except:
             TRUE_REWARD_FACTOR, FOG_OF_WAR_REWARD, DEATH_REWARD = 5, 1, -200
 
-        # print "New rewards have been set: {} {} {}".format(TRUE_REWARD_FACTOR, FOG_OF_WAR_REWARD, DEATH_REWARD)
+        print "New rewards have been set: {} {} {}".format(TRUE_REWARD_FACTOR, FOG_OF_WAR_REWARD, DEATH_REWARD)
 
 
 

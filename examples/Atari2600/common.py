@@ -24,16 +24,25 @@ global get_player
 get_player = None
 
 def play_one_episode(player, func, verbose=False):
-    def f(s):
+    def f(s, full_info = False):
         spc = player.get_action_space()
 
         # print "Action space:{}".format(spc)
-        act = func([[s]])[0][0].argmax()
+        xxx = func([[s]])
+
+        action_dist = xxx[0][0]
+        value = xxx[1][0]
+        act = action_dist.argmax()
         if random.random() < 0.001:
             act = spc.sample()
         if verbose:
             print(act)
-        return act
+
+        if full_info:
+            return act, action_dist, value
+        else:
+            return act
+
     return np.mean(player.play_one_episode(f))
 
 def play_model(cfg):

@@ -202,3 +202,27 @@ class KeyboardPlayer(ProxyPlayer):
         r, isOver = self.player.action(act)
         return r, isOver
 
+    def play_one_episode(self, func, stat = 'score'):
+        gymenv = self.player.player.player.player.gymenv
+        if not isinstance(stat, list):
+            stat = [stat]
+        s = self.current_state()
+        self.cached_action, action_dist, val  = func(s, full_info=True)
+        # gymenv.set_additional_render_info(action_dist)
+        # print "Action dist:{} of len:{}".format(action_dist, len(action_dist))
+
+
+        while True:
+            r, isOver = self.action(self.cached_action)
+            if isOver:
+                s = [self.stats[k] for k in stat]
+                self.reset_stat()
+                return s if len(s) > 1 else s[0]
+            else:
+                s = self.current_state()
+                self.cached_action, action_dist, value = func(s, full_info=True)
+                to_display = action_dist.tolist()
+                to_display.append(0)
+                to_display.append(value/10)
+                gymenv.set_additional_render_info(to_display)
+                # print "The next action is going to be:{}".format(self.cached_action)

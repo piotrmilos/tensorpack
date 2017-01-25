@@ -86,7 +86,7 @@ def run_submission(cfg, dump_dir = 'gym-submit'):
     dirname = dump_dir
     player = get_player(dumpdir=dirname)
     # player = get_player("/home/piotr.milos")
-    print "config:{}".format(cfg)
+    # print "config:{}".format(cfg)
     predfunc = get_predict_func(cfg)
 
     for k in range(10):
